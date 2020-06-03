@@ -822,6 +822,69 @@ static int debug_gref(struct domain *d, grant_ref_t ref)
     return debug_gfn(d, gfn);
 }
 
+int nomin_page(struct domain *d, gfn_t gfn,
+                         unsigned int expected_refcnt, bool validate_only,
+                         shr_handle_t *phandle)
+{
+    struct p2m_domain *hp2m;
+    p2m_type_t p2mt;
+    p2m_access_t p2ma;
+    mfn_t mfn;
+    struct page_info *page = NULL;
+    int ret;
+
+
+    hp2m = p2m_get_hostp2m(d);
+    mfn = get_gfn_type_access(hp2m, gfn_x(gfn), &p2mt, &p2ma, 0, NULL);
+            gdprintk(XENLOG_ERR, "nom_page start");
+
+    page = mfn_to_page(mfn);
+    if ( page && !(is_special_page(page)) ) {
+       ret = page_make_sharable(d, page, 0, false);
+       gdprintk(XENLOG_ERR, "nom_page c1");
+
+    if ( !mem_sharing_page_lock(page) ) {
+       gdprintk(XENLOG_ERR, "nom_page pagelock fail");
+    }
+
+    if( !(page->sharing = xmalloc(struct page_sharing_info)) ) {
+      gdprintk(XENLOG_ERR, "nom_page err1");
+    }
+
+    gdprintk(XENLOG_ERR, "nom_page c2");
+
+    page->sharing->pg = page;
+    rmap_init(page);
+    gdprintk(XENLOG_ERR, "nom_page c3");
+
+    page->sharing->handle = get_next_handle();
+
+
+   if ( !mem_sharing_gfn_alloc(page, d, gfn_x(gfn)) ) {
+       gdprintk(XENLOG_ERR, "nom_page err2");
+   }
+   BUG_ON(p2m_change_type_one(d, gfn_x(gfn), p2mt, p2m_ram_shared));
+
+
+   atomic_inc(&nr_shared_mfns);
+   gdprintk(XENLOG_ERR, "nom_page c4");
+
+   /* Update m2p entry to SHARED_M2P_ENTRY */
+   set_gpfn_from_mfn(mfn_x(mfn), SHARED_M2P_ENTRY);
+   gdprintk(XENLOG_ERR, "nom_page c5");
+
+   audit_add_list(page);
+   gdprintk(XENLOG_ERR, "nom_page c6");
+
+   mem_sharing_page_unlock(page);
+   gdprintk(XENLOG_ERR, "nom_page c7");
+
+   put_gfn(d, gfn_x(gfn));
+   }
+   gdprintk(XENLOG_ERR, "nom_page end");
+
+   return 0;
+}
 
 static int nominate_page(struct domain *d, gfn_t gfn,
                          unsigned int expected_refcnt, bool validate_only,

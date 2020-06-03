@@ -350,19 +350,74 @@ static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
 }
 
 /*
- * Invalidate (via setting the EMT field to an invalid value) all valid
- * present entries in the given page table, optionally marking the entries
- * also for their subtrees needing P2M type re-calculation.
+ * Hypercall definition to mark pages CoW
  */
 
 unsigned long trigger_ro_ops( struct domain *d ) {
-//HYPERCALL DEFINITION
-return 0;	
+      struct ept_data *ept;
+      struct p2m_domain *p2m;
+      int order;
+      int i;
+      int rtt;
+      int ret;
+      unsigned long gfn, gfn_remainder;
+      ept_entry_t *table;
+      ept_entry_t *ept_entry;
+
+      rtt=0;
+      p2m = p2m_get_hostp2m(d);
+      ept = &p2m->ept;
+      order = (ept->wl) * EPT_TABLE_ORDER;
+
+      printk("\ndomain%d EPT p2m table:\n", d->domain_id);
+      printk("\norder%d", order);
+
+      for ( gfn = 0; gfn <= p2m->max_mapped_pfn; gfn += 1UL << order ) {
+          ret = GUEST_TABLE_MAP_FAILED;
+
+          gfn_remainder = gfn;
+          table = map_domain_page(pagetable_get_mfn(p2m_get_pagetable(p2m)));
+
+          for ( i = ept->wl; i > 0; i-- ) {
+              ept_entry = table + (gfn_remainder >> (i * EPT_TABLE_ORDER));
+              ret = ept_next_level(p2m, 1, &table, &gfn_remainder, i);
+              if ( ret != GUEST_TABLE_NORMAL_PAGE )
+                 break;
+          }
+
+          order = i * EPT_TABLE_ORDER;
+          ept_entry = table + (gfn_remainder >> order);
+          if ( ret != GUEST_TABLE_MAP_FAILED && is_epte_valid(ept_entry) ) {
+             if ( ept_entry->sa_p2mt == p2m_populate_on_demand )
+                printk("gfn: %13lx order: %2d PoD sap2mt=%d\n", gfn, order,(ept_entry->sa_p2mt));
+             else
+                printk("gfn: %13lx order: %2d mfn: %13lx %c%c%c sap2mt=%d\n",
+                      gfn, order, ept_entry->mfn + 0UL,
+                      ept_entry->r ? 'r' : ' ',
+                      ept_entry->w ? 'w' : ' ',
+                      ept_entry->x ? 'x' : ' ',
+                      (ept_entry->sa_p2mt));
+
+
+
+             if ( ept_entry->sa_p2mt == p2m_ram_rw ) {
+                rtt=nomin_page(d,_gfn(gfn),0,false, NULL);
+
+                printk("modgfn: %13lx order: %2d mfn: %13lx %c%c%c sap2mt=%d\n",
+                           gfn, order, ept_entry->mfn + 0UL,
+                           ept_entry->r ? 'r' : ' ',
+                           ept_entry->w ? 'w' : ' ',
+                           ept_entry->x ? 'x' : ' ',
+                           (ept_entry->sa_p2mt));
+
+             }
+          }
+          unmap_domain_page(table);
+      }
+      printk("\nTop_order%d", (ept->wl)*EPT_TABLE_ORDER);
+      printk("\nwl%d", (ept->wl));
+return 0;
 }
-
-
-
-
 
 
 static bool ept_invalidate_emt_subtree(struct p2m_domain *p2m, mfn_t mfn,
