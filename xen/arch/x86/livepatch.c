@@ -37,6 +37,7 @@ int arch_livepatch_safety_check(void)
 
     for_each_domain ( d )
     {
+//extra code
 #ifdef CONFIG_MEM_SHARING
         if ( has_active_waitqueue(d->vm_event_share) )
             goto fail;

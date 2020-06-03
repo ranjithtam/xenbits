@@ -31,7 +31,8 @@
 #include <asm/hvm/cacheattr.h>
 #include <xen/keyhandler.h>
 #include <xen/softirq.h>
-
+//#include <xen/hypercall.h>
+//#include <asm/hypercall.h>
 #include "mm-locks.h"
 
 #define atomic_read_ept_entry(__pepte)                              \
@@ -353,6 +354,17 @@ static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
  * present entries in the given page table, optionally marking the entries
  * also for their subtrees needing P2M type re-calculation.
  */
+
+unsigned long trigger_ro_ops( struct domain *d ) {
+//HYPERCALL DEFINITION
+return 0;	
+}
+
+
+
+
+
+
 static bool ept_invalidate_emt_subtree(struct p2m_domain *p2m, mfn_t mfn,
                                        bool recalc, unsigned int level)
 {

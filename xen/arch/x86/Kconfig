@@ -17,6 +17,7 @@ config X86
 	select HAS_KEXEC
 	select MEM_ACCESS_ALWAYS_ON
 	select HAS_MEM_PAGING
+	select HAS_MEM_SHARING
 	select HAS_NS16550
 	select HAS_PASSTHROUGH
 	select HAS_PCI
@@ -234,6 +235,7 @@ endif
 
 config MEM_SHARING
 	bool "Xen memory sharing support" if EXPERT = "y"
+	default y
 	depends on HVM
 
 endmenu

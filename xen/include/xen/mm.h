@@ -275,6 +275,7 @@ struct npfec {
 
 /* Private domain structs for DOMID_XEN, DOMID_IO, etc. */
 extern struct domain *dom_xen, *dom_io;
+//extra code
 #ifdef CONFIG_MEM_SHARING
 extern struct domain *dom_cow;
 #else

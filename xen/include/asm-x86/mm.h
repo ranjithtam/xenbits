@@ -8,7 +8,6 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/x86_emulate.h>
-
 /*
  * Per-page-frame information.
  *
@@ -130,7 +129,7 @@ struct page_info
         /* For non-pinnable single-page shadows, a higher entry that points
          * at us. */
         paddr_t up;
-
+//extra code
 #ifdef CONFIG_MEM_SHARING
         /* For shared/sharable pages, we use a doubly-linked list
          * of all the {pfn,domain} pairs that map this page. We also include
@@ -581,6 +580,7 @@ void make_cr3(struct vcpu *v, mfn_t mfn);
 void update_cr3(struct vcpu *v);
 int vcpu_destroy_pagetables(struct vcpu *);
 void *do_page_walk(struct vcpu *v, unsigned long addr);
+
 
 /* Allocator functions for Xen pagetables. */
 void *alloc_xen_pagetable(void);

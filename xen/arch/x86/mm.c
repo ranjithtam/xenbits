@@ -237,6 +237,8 @@ static void __init init_frametable_chunk(void *start, void *end)
     memset(end, -1, s - e);
 }
 
+
+
 void __init init_frametable(void)
 {
     unsigned int sidx, eidx, nidx;

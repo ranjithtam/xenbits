@@ -32,6 +32,7 @@
 #include <asm/page.h>    /* for pagetable_t */
 
 extern bool_t opt_hap_1gb, opt_hap_2mb;
+//bool ept_mark_level_ro(struct p2m_domain *p2m, mfn_t mfn, unsigned int level);
 
 /*
  * The upper levels of the p2m pagetable always contain full rights; all 

@@ -1172,7 +1172,7 @@ long arch_do_domctl(
             copyback = true;
         break;
     }
-
+//extra code
 #ifdef CONFIG_MEM_SHARING
     case XEN_DOMCTL_mem_sharing_op:
         ret = mem_sharing_domctl(d, &domctl->u.mem_sharing_op);

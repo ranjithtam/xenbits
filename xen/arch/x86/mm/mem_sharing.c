@@ -737,8 +737,10 @@ static struct page_info *__grab_shared_page(mfn_t mfn)
 {
     struct page_info *pg = NULL;
 
-    if ( !mfn_valid(mfn) )
+    if ( !mfn_valid(mfn) ) {
+	gdprintk(XENLOG_ERR, "rtshere1 invalid mfn=%lx\n", mfn_x(mfn));
         return NULL;
+    }
 
     pg = mfn_to_page(mfn);
 
@@ -746,12 +748,15 @@ static struct page_info *__grab_shared_page(mfn_t mfn)
      * If the page is not validated we can't lock it, and if it's
      * not validated it's obviously not shared.
      */
-    if ( !mem_sharing_page_lock(pg) )
+    if ( !mem_sharing_page_lock(pg) ) {
+	gdprintk(XENLOG_ERR, "rtshere2 ");
         return NULL;
+    }
 
     if ( mem_sharing_lookup(mfn_x(mfn)) == NULL )
     {
         mem_sharing_page_unlock(pg);
+	gdprintk(XENLOG_ERR, "rtshere3 ");
         return NULL;
     }
 
@@ -816,6 +821,7 @@ static int debug_gref(struct domain *d, grant_ref_t ref)
 
     return debug_gfn(d, gfn);
 }
+
 
 static int nominate_page(struct domain *d, gfn_t gfn,
                          unsigned int expected_refcnt, bool validate_only,

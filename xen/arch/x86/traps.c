@@ -81,13 +81,14 @@
 #include <xsm/xsm.h>
 #include <asm/pv/traps.h>
 #include <asm/pv/mm.h>
-
 /*
  * opt_nmi: one of 'ignore', 'dom0', or 'fatal'.
  *  fatal:  Xen prints diagnostic message and then hangs.
  *  dom0:   The NMI is virtualised to DOM0.
  *  ignore: The NMI error is cleared and ignored.
  */
+//extern bool ept_mark_level_ro(struct p2m_domain *p2m, mfn_t mfn, unsigned int level);
+
 #ifdef NDEBUG
 static char __read_mostly opt_nmi[10] = "dom0";
 #else
@@ -799,6 +800,53 @@ static void do_trap(struct cpu_user_regs *regs)
           trapnr, trapstr(trapnr), regs->error_code);
 }
 
+/*
+   unsigned long do_trigger_ro_op( unsigned long domainId ) {
+   struct domain *d;
+   unsigned short domId;
+   struct p2m_domain *p2m;
+   struct ept_data *ept;
+   ept_entry_t *table;
+   ept_entry_t *ept_entry;
+   mfn_t mfn;
+   int i;
+
+   printk("Invoketriggerroop");
+   
+   domId  = (unsigned short)domainId;
+   d = get_domain_by_id( domId );
+   if( d ) {
+      printk("domId present");
+
+      p2m = p2m_get_hostp2m(d);
+      ept = &p2m->ept;
+      table = map_domain_page(pagetable_get_mfn(p2m_get_pagetable(p2m)));
+      //or ept_entry_t *table = map_domain_page(_mfn(ept->mfn));
+      ept_entry = table;
+      mfn = pagetable_get_mfn(p2m_get_pagetable(p2m));
+      //or mfn_t mfn = ept->mfn;
+
+      for(i = ept->wl; i>=0; i--) {
+         ept_mark_level_ro(p2m, mfn, i);
+         mfn = _mfn(ept_entry->mfn);
+         unmap_domain_page(ept_entry);
+         ept_entry = map_domain_page(mfn);
+      }
+      unmap_domain_page(table);
+      return 0;
+   }
+   return 1;
+}
+
+
+unsigned long do_trigger_ro_op( unsigned long domainId ) {
+         unsigned long ret=1;
+         printk("Invoketriggerroop");
+         ret=trigger_ro_op_1(domainId);
+         return ret;
+         return 1;
+}
+*/
 int guest_rdmsr_xen(const struct vcpu *v, uint32_t idx, uint64_t *val)
 {
     const struct domain *d = v->domain;

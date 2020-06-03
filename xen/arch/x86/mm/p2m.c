@@ -50,6 +50,24 @@ boolean_param("hap_2mb", opt_hap_2mb);
 
 DEFINE_PERCPU_RWLOCK_GLOBAL(p2m_percpu_rwlock);
 
+unsigned long do_trigger_ro_op( unsigned long domainId ) {
+         unsigned long ret=1;
+	 unsigned short domId;
+	 struct domain *d;
+
+         printk("Invoketriggerroop");
+	 domId  = (unsigned short)domainId;
+         d = get_domain_by_id( domId );
+	 if ( d ) {
+	    printk(" domain existing " );
+	    if ( hap_enabled(d) && cpu_has_vmx ) {
+               ret=trigger_ro_ops(d);
+	    }
+	 }
+         return ret;
+}
+
+
 static void p2m_nestedp2m_init(struct p2m_domain *p2m)
 {
 #ifdef CONFIG_HVM
@@ -97,10 +115,12 @@ static int p2m_initialise(struct domain *d, struct p2m_domain *p2m)
     p2m_pod_init(p2m);
     p2m_nestedp2m_init(p2m);
 
-    if ( hap_enabled(d) && cpu_has_vmx )
+    if ( hap_enabled(d) && cpu_has_vmx ) {
         ret = ept_p2m_init(p2m);
-    else
+    }
+    else {
         p2m_pt_init(p2m);
+    }
 
     spin_lock_init(&p2m->ioreq.lock);
 

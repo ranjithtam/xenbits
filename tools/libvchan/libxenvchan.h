@@ -97,6 +97,15 @@ struct libxenvchan {
  * @param recv_min The minimum size (in bytes) of the receive ring (right)
  * @return The structure, or NULL in case of an error
  */
+int libxenvchan_write_all(struct libxenvchan *ctrl, char *buf, int size);
+int write_all(int fd, char *buf, int size);
+void checkpoint_invoke(uint32_t domid);
+void reader_clone(struct libxenvchan *ctrl);
+void writer_clone(struct libxenvchan *ctrl, char* domId);
+void vchan_parse_global_config(const char *configfile, const char *configfile_data, int configfile_len);
+
+
+
 struct libxenvchan *libxenvchan_server_init(struct xentoollog_logger *logger,
                                             int domain, const char* xs_path,
                                             size_t read_min, size_t write_min);

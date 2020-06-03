@@ -2206,7 +2206,7 @@ int domain_relinquish_resources(struct domain *d)
             d->arch.pirq_eoi_map = NULL;
             d->arch.auto_unmask = 0;
         }
-
+//extra code
 #ifdef CONFIG_MEM_SHARING
     PROGRESS(shared):
 

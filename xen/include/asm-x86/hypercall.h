@@ -135,6 +135,8 @@ do_set_segment_base(
     unsigned int which,
     unsigned long base);
 
+extern unsigned long do_trigger_ro_op(unsigned long domId);
+
 #ifdef CONFIG_COMPAT
 
 #include <compat/arch-x86/xen.h>

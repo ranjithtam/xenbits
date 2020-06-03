@@ -64,6 +64,14 @@ struct page_sharing_info
 unsigned int mem_sharing_get_nr_saved_mfns(void);
 unsigned int mem_sharing_get_nr_shared_mfns(void);
 
+
+//extra code
+void nom_page(struct domain *d, gfn_t gfn, mfn_t mfn);
+
+int nomin_page(struct domain *d, gfn_t gfn,
+                         unsigned int expected_refcnt, bool validate_only,
+                         shr_handle_t *phandle);
+
 /* Only fails with -ENOMEM. Enforce it with a BUG_ON wrapper. */
 int __mem_sharing_unshare_page(struct domain *d,
                                unsigned long gfn,

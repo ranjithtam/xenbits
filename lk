@@ -1,0 +1,1400 @@
+diff --git a/tools/Makefile b/tools/Makefile
+index c10946e3b1..e675d02f51 100644
+--- a/tools/Makefile
++++ b/tools/Makefile
+@@ -21,7 +21,6 @@ SUBDIRS-y += xenmon
+ SUBDIRS-y += xenstat
+ SUBDIRS-$(CONFIG_NetBSD) += xenbackendd
+ SUBDIRS-y += libfsimage
+-SUBDIRS-$(CONFIG_Linux) += libvchan
+ 
+ # do not recurse in to a dir we are about to delete
+ ifneq "$(MAKECMDGOALS)" "distclean"
+@@ -33,6 +32,7 @@ SUBDIRS-y += xenpmd
+ SUBDIRS-y += libxl
+ SUBDIRS-$(CONFIG_GOLANG) += golang
+ SUBDIRS-y += xl
++SUBDIRS-$(CONFIG_Linux) += libvchan
+ SUBDIRS-y += helpers
+ SUBDIRS-$(CONFIG_X86) += xenpaging
+ SUBDIRS-$(CONFIG_X86) += debugger/gdbsx
+diff --git a/tools/Rules.mk b/tools/Rules.mk
+index 5b8cf748ad..c11dc5761e 100644
+--- a/tools/Rules.mk
++++ b/tools/Rules.mk
+@@ -24,6 +24,7 @@ XEN_XENLIGHT       = $(XEN_ROOT)/tools/libxl
+ # Currently libxlutil lives in the same directory as libxenlight
+ XEN_XLUTIL         = $(XEN_XENLIGHT)
+ XEN_XENSTORE       = $(XEN_ROOT)/tools/xenstore
++XEN_XL             = $(XEN_ROOT)/tools/xl
+ XEN_LIBXENSTAT     = $(XEN_ROOT)/tools/xenstat/libxenstat/src
+ XEN_LIBVCHAN       = $(XEN_ROOT)/tools/libvchan
+ 
+@@ -152,13 +153,22 @@ ifeq ($(CONFIG_Linux),y)
+ LDLIBS_libxenstore += -ldl
+ endif
+ 
++CFLAGS_xl = -I$(XEN_XL)/include $(CFLAGS_xeninclude)
++SHDEPS_xl = $(SHLIB_libxentoolcore)
++LDLIBS_xl = $(SHDEPS_xl) $(XEN_XL)/libxl$(libextension)
++SHLIB_xl  = $(SHDEPS_xl) -Wl,-rpath-link=$(XEN_XL)
++ifeq ($(CONFIG_Linux),y)
++LDLIBS_xl += -ldl
++endif
++
+ CFLAGS_libxenstat  = -I$(XEN_LIBXENSTAT)
+ SHDEPS_libxenstat  = $(SHLIB_libxenctrl) $(SHLIB_libxenstore)
+ LDLIBS_libxenstat  = $(SHDEPS_libxenstat) $(XEN_LIBXENSTAT)/libxenstat$(libextension)
+ SHLIB_libxenstat   = $(SHDEPS_libxenstat) -Wl,-rpath-link=$(XEN_LIBXENSTAT)
+ 
+ CFLAGS_libxenvchan = -I$(XEN_LIBVCHAN)
+-SHDEPS_libxenvchan = $(SHLIB_libxentoollog) $(SHLIB_libxenstore) $(SHLIB_libxenevtchn) $(SHLIB_libxengnttab)
++#SHDEPS_libxenvchan = $(SHLIB_libxentoollog) $(SHLIB_libxenstore) $(SHLIB_libxenevtchn) $(SHLIB_libxengnttab)
++SHDEPS_libxenvchan = $(SHLIB_libxentoollog) $(SHLIB_libxenstore) $(SHLIB_libxenevtchn) $(SHLIB_libxengnttab) $(SHLIB_xl)
+ LDLIBS_libxenvchan = $(SHDEPS_libxenvchan) $(XEN_LIBVCHAN)/libxenvchan$(libextension)
+ SHLIB_libxenvchan  = $(SHDEPS_libxenvchan) -Wl,-rpath-link=$(XEN_LIBVCHAN)
+ 
+diff --git a/tools/libvchan/Makefile b/tools/libvchan/Makefile
+index 7892750c3e..7590b5296e 100644
+--- a/tools/libvchan/Makefile
++++ b/tools/libvchan/Makefile
+@@ -8,16 +8,21 @@ include $(XEN_ROOT)/tools/Rules.mk
+ LIBVCHAN_OBJS = init.o io.o
+ NODE_OBJS = node.o
+ NODE2_OBJS = node-select.o
+-
++CLONE_OBJS = clone.o
+ LIBVCHAN_PIC_OBJS = $(patsubst %.o,%.opic,$(LIBVCHAN_OBJS))
+-LIBVCHAN_LIBS = $(LDLIBS_libxenstore) $(LDLIBS_libxengnttab) $(LDLIBS_libxenevtchn)
+-$(LIBVCHAN_OBJS) $(LIBVCHAN_PIC_OBJS): CFLAGS += $(CFLAGS_libxenstore) $(CFLAGS_libxengnttab) $(CFLAGS_libxenevtchn)
+-$(NODE_OBJS) $(NODE2_OBJS): CFLAGS += $(CFLAGS_libxengnttab) $(CFLAGS_libxenevtchn)
++#LIBVCHAN_LIBS = $(LDLIBS_libxenstore) $(LDLIBS_libxengnttab) $(LDLIBS_libxenevtchn)
++#$(LIBVCHAN_OBJS) $(LIBVCHAN_PIC_OBJS): CFLAGS += $(CFLAGS_libxenstore) $(CFLAGS_libxengnttab) $(CFLAGS_libxenevtchn)
++#$(NODE_OBJS) $(NODE2_OBJS): CFLAGS += $(CFLAGS_libxengnttab) $(CFLAGS_libxenevtchn)
++LIBVCHAN_LIBS = $(LDLIBS_libxenstore) $(LDLIBS_libxengnttab) $(LDLIBS_libxenevtchn) $(LDLIBS_xl) $(LDLIBS_libxentoollog)
++$(LIBVCHAN_OBJS) $(LIBVCHAN_PIC_OBJS): CFLAGS += -D__XEN_TOOLS__ -pthread $(CFLAGS_libxenstore) $(CFLAGS_libxengnttab) $(CFLAGS_libxenevtchn)
++$(NODE_OBJS) $(NODE2_OBJS) $(CLONE_OBJS): CFLAGS += -D__XEN_TOOLS__ -pthread $(CFLAGS_libxengnttab) $(CFLAGS_libxenevtchn)
+ 
+ MAJOR = 4.14
+ MINOR = 0
+ 
+-CFLAGS += -I../include -I.
++#CFLAGS += -I../include -I.
++CFLAGS += -I../include -I. -I../xl -I../console/client -I../libs/toollog/include -I../../xen/include
++CFLAGS  += $(CFLAGS_libxentoollog)
+ 
+ io.o io.opic: CFLAGS += $(CFLAGS_libxenctrl) # for xen_mb et al
+ 
+@@ -39,7 +44,8 @@ $(PKG_CONFIG_LOCAL): PKG_CONFIG_LIBDIR = $(CURDIR)
+ $(PKG_CONFIG_LOCAL): PKG_CONFIG_CFLAGS_LOCAL = $(CFLAGS_xeninclude)
+ 
+ .PHONY: all
+-all: libxenvchan.so vchan-node1 vchan-node2 libxenvchan.a $(PKG_CONFIG_INST) $(PKG_CONFIG_LOCAL)
++#all: libxenvchan.so vchan-node1 vchan-node2 libxenvchan.a $(PKG_CONFIG_INST) $(PKG_CONFIG_LOCAL)
++all: libxenvchan.so vchan-node1 vchan-node2 libxenvchan.a clone $(PKG_CONFIG_INST) $(PKG_CONFIG_LOCAL)
+ 
+ libxenvchan.so: libxenvchan.so.$(MAJOR)
+ 	ln -sf $< $@
+@@ -59,6 +65,11 @@ vchan-node1: $(NODE_OBJS) libxenvchan.so
+ vchan-node2: $(NODE2_OBJS) libxenvchan.so
+ 	$(CC) $(LDFLAGS) -o $@ $(NODE2_OBJS) $(LDLIBS_libxenvchan) $(APPEND_LDFLAGS)
+ 
++clone: $(CLONE_OBJS) libxenvchan.so
++	$(CC) $(LDFLAGS) -o $@ $(CLONE_OBJS) -pthread -Wl,-rpath-link=$(XEN_XL) $(XEN_XL)/libxl.so $(LDLIBS_libxenvchan) -Wl,-rpath-link=$(XEN_XENLIGHT) $(XEN_XENLIGHT)/libxenlight.so -Wl,-rpath-link=$(XEN_LIBXENTOOLLOG) $(LDLIBS_libxentoollog) $(XEN_XENLIGHT)/libxlutil.so -Wl,-rpath=$(XEN_XL) $(XEN_XL)/xl_info.o -Wl,-rpath=$(XEN_LIBXC) $(XEN_LIBXC)/libxenctrl.so $(XEN_LIBXC)/libxenguest.so -lyajl $(APPEND_LDFLAGS)
++
++
++
+ .PHONY: install
+ install: all
+ 	$(INSTALL_DIR) $(DESTDIR)$(libdir)
+@@ -81,7 +92,7 @@ uninstall:
+ 
+ .PHONY: clean
+ clean:
+-	$(RM) -f *.o *.opic *.so* *.a vchan-node1 vchan-node2 $(DEPS_RM)
++	$(RM) -f *.o *.opic *.so* *.a vchan-node1 vchan-node2 clone $(DEPS_RM)
+ 	$(RM) -f xenvchan.pc
+ 
+ distclean: clean
+diff --git a/tools/libvchan/libxenvchan.h b/tools/libvchan/libxenvchan.h
+index d6010b145d..8332981669 100644
+--- a/tools/libvchan/libxenvchan.h
++++ b/tools/libvchan/libxenvchan.h
+@@ -97,6 +97,15 @@ struct libxenvchan {
+  * @param recv_min The minimum size (in bytes) of the receive ring (right)
+  * @return The structure, or NULL in case of an error
+  */
++int libxenvchan_write_all(struct libxenvchan *ctrl, char *buf, int size);
++int write_all(int fd, char *buf, int size);
++void checkpoint_invoke(uint32_t domid);
++void reader_clone(struct libxenvchan *ctrl);
++void writer_clone(struct libxenvchan *ctrl, char* domId);
++void vchan_parse_global_config(const char *configfile, const char *configfile_data, int configfile_len);
++
++
++
+ struct libxenvchan *libxenvchan_server_init(struct xentoollog_logger *logger,
+                                             int domain, const char* xs_path,
+                                             size_t read_min, size_t write_min);
+diff --git a/tools/xl/Makefile b/tools/xl/Makefile
+index af4912e67a..eb3ea7e00f 100644
+--- a/tools/xl/Makefile
++++ b/tools/xl/Makefile
+@@ -5,6 +5,9 @@
+ XEN_ROOT = $(CURDIR)/../..
+ include $(XEN_ROOT)/tools/Rules.mk
+ 
++MAJOR=1.0
++MINOR=1
++
+ CFLAGS += -Werror -Wno-format-zero-length -Wmissing-declarations \
+ 	-Wno-declaration-after-statement -Wformat-nonliteral
+ CFLAGS += -I. -fPIC
+@@ -32,18 +35,38 @@ genpath-target = $(call buildmakevars2header,_paths.h)
+ $(eval $(genpath-target))
+ 
+ $(XL_OBJS): _paths.h
++ALL_TARGETS = xl libxl.a libxl.so
+ 
+ .PHONY: all
+-all: xl
++all: $(ALL_TARGETS)
+ 
+-xl: $(XL_OBJS)
++xl: $(XL_OBJS) libxl.so libxl.a
+ 	$(CC) $(LDFLAGS) -o $@ $(XL_OBJS) $(LDLIBS_libxlutil) $(LDLIBS_libxenlight) $(LDLIBS_libxentoollog) -lyajl $(APPEND_LDFLAGS)
+ 
++
++libxl.a: $(XL_OBJS)
++	$(AR) rcs $@ $^
++
++libxl.so.$(MAJOR).$(MINOR): APPEND_LDFLAGS += -ldl
++
++libxl.so: libxl.so.$(MAJOR)
++	ln -sf $< $@
++
++libxl.so.$(MAJOR): libxl.so.$(MAJOR).$(MINOR)
++	ln -sf $< $@
++libxl.so.$(MAJOR).$(MINOR): xl_saverestore.opic xl_parse.opic xl_utils.opic xl.opic xl_block.opic xl_cdrom.opic xl_cmdtable.opic xl_console.opic xl_cpupool.opic xl_flask.opic xl_mem.opic xl_migrate.opic xl_nic.opic xl_pci.opic xl_psr.opic xl_sched.opic xl_sxp.opic xl_usb.opic xl_vcpu.opic xl_vdispl.opic xl_vkb.opic xl_vmcontrol.opic xl_vsnd.opic xl_vtpm.opic xl_misc.opic
++	$(CC) $(LDFLAGS) -Wl,$(SONAME_LDFLAG) -Wl,libxl.so.$(MAJOR) $(SHLIB_LDFLAGS) -o $@ $^ $(LDLIBS_libxentoolcore) $(SOCKET_LIBS) $(PTHREAD_LIBS) -lyajl $(APPEND_LDFLAGS)
++
+ .PHONY: install
+ install: all
+ 	$(INSTALL_DIR) $(DESTDIR)$(sbindir)
+ 	$(INSTALL_DIR) $(DESTDIR)$(BASH_COMPLETION_DIR)
+ 	$(INSTALL_PROG) xl $(DESTDIR)$(sbindir)
++	$(INSTALL_DIR) $(DESTDIR)$(libdir)
++	$(INSTALL_SHLIB) libxl.so.$(MAJOR).$(MINOR) $(DESTDIR)$(libdir)
++	ln -sf libxl.so.$(MAJOR).$(MINOR) $(DESTDIR)$(libdir)/libxl.so.$(MAJOR)
++	ln -sf libxl.so.$(MAJOR) $(DESTDIR)$(libdir)/libxl.so
++	$(INSTALL_DATA) libxl.a $(DESTDIR)$(libdir)
+ 	$(INSTALL_DATA) bash-completion $(DESTDIR)$(BASH_COMPLETION_DIR)/xl.sh
+ 
+ .PHONY: uninstall
+@@ -54,6 +77,7 @@ uninstall:
+ .PHONY: clean
+ clean:
+ 	$(RM) -f *.o xl _paths.h $(DEPS_RM)
++	$(RM) -f *.a *.o *.opic *.so* xl _paths.h $(DEPS_RM)
+ 
+ distclean: clean
+ 
+diff --git a/tools/xl/xl.h b/tools/xl/xl.h
+index 06569c6c4a..6fde4a4346 100644
+--- a/tools/xl/xl.h
++++ b/tools/xl/xl.h
+@@ -53,6 +53,9 @@ struct domain_create {
+ };
+ 
+ int create_domain(struct domain_create *dom_info);
++//int save_domain(uint32_t domid, int preserve_domid, const char *filename, int checkpoint, int leavepaused, const char *override_config_file);
++int csave_domain(uint32_t domid, int preserve_domid, const char *filename, int checkpoint,int leavepaused, const char *override_config_file);
++int save_domain(uint32_t domid, int preserve_domid, const char *filename, int checkpoint, int leavepaused, const char *override_config_file);
+ 
+ 
+ static const char savefileheader_magic[32]=
+diff --git a/tools/xl/xl_saverestore.c b/tools/xl/xl_saverestore.c
+index 953d791d1a..f05c31957a 100644
+--- a/tools/xl/xl_saverestore.c
++++ b/tools/xl/xl_saverestore.c
+@@ -123,7 +123,77 @@ void save_domain_core_writeconfig(int fd, const char *source,
+             hdr.optional_data_len);
+ }
+ 
+-static int save_domain(uint32_t domid, int preserve_domid,
++int csave_domain(uint32_t domid, int preserve_domid,
++                       const char *filename, int checkpoint,
++                       int leavepaused, const char *override_config_file)
++{
++    int fd;
++    uint8_t *config_data;
++    int config_len;
++    struct domain_create dom_info;
++    int paused = 0, debug = 0, daemonize = 1, monitor = 1,
++        console_autoconnect = 0, vnc = 0, vncautopass = 0;
++
++
++    save_domain_core_begin(domid, preserve_domid, override_config_file,
++                           &config_data, &config_len);
++
++    if (!config_len) {
++        fputs(" Savefile will not contain xl domain config\n", stderr);
++    }
++
++    fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0644);
++    if (fd < 0) {
++        fprintf(stderr, "Failed to open temp file %s for writing\n", filename);
++        exit(EXIT_FAILURE);
++    }
++
++    save_domain_core_writeconfig(fd, filename, config_data, config_len);
++
++    fprintf(stderr, "core_writeconfig done\n");
++    int rc = libxl_domain_suspend(ctx, domid, fd, 0, NULL);
++    close(fd);
++
++    if (rc < 0) {
++        fprintf(stderr, "Failed to save domain, resuming domain\n");
++        libxl_domain_resume(ctx, domid, 1, 0);
++    }
++    else if (leavepaused || checkpoint) {
++        if (leavepaused)
++            libxl_domain_pause(ctx, domid, NULL);
++        libxl_domain_resume(ctx, domid, 1, 0);
++    }
++    else {
++	libxl_domain_destroy(ctx, domid, 0);
++    }
++
++    memset(&dom_info, 0, sizeof(dom_info));
++    dom_info.debug = debug;
++    dom_info.daemonize = daemonize;
++    dom_info.monitor = monitor;
++    dom_info.paused = paused;
++    dom_info.config_file = NULL;
++    dom_info.restore_file = filename;
++    dom_info.migrate_fd = -1;
++    dom_info.send_back_fd = -1;
++    dom_info.vnc = vnc;
++    dom_info.vncautopass = vncautopass;
++    dom_info.console_autoconnect = console_autoconnect;
++    dom_info.extra_config = "name=\"hello\"";
++
++    fprintf(stderr, "create domain invoked\n");
++    fprintf(stderr, "%s\n", dom_info.extra_config);
++    rc = create_domain(&dom_info);
++
++    if (rc < 0)
++	return EXIT_FAILURE;
++    return EXIT_SUCCESS;
++}
++
++
++
++
++int save_domain(uint32_t domid, int preserve_domid,
+                        const char *filename, int checkpoint,
+                        int leavepaused, const char *override_config_file)
+ {
+diff --git a/tools/xl/xl_vmcontrol.c b/tools/xl/xl_vmcontrol.c
+index 17b4514c94..d6fb197ab6 100644
+--- a/tools/xl/xl_vmcontrol.c
++++ b/tools/xl/xl_vmcontrol.c
+@@ -916,11 +916,13 @@ start:
+         libxl_defbool_set(&params.userspace_colo_proxy,
+                           dom_info->userspace_colo_proxy);
+ 
++	d_config.c_info.name="hello";
+         ret = libxl_domain_create_restore(ctx, &d_config,
+                                           &domid, restore_fd,
+                                           send_back_fd, &params,
+                                           0, autoconnect_console_how);
+ 
++
+         libxl_domain_restore_params_dispose(&params);
+ 
+         /*
+diff --git a/xen/arch/x86/Kconfig b/xen/arch/x86/Kconfig
+index 96432f1f69..8daa36fdd5 100644
+--- a/xen/arch/x86/Kconfig
++++ b/xen/arch/x86/Kconfig
+@@ -17,6 +17,7 @@ config X86
+ 	select HAS_KEXEC
+ 	select MEM_ACCESS_ALWAYS_ON
+ 	select HAS_MEM_PAGING
++	select HAS_MEM_SHARING
+ 	select HAS_NS16550
+ 	select HAS_PASSTHROUGH
+ 	select HAS_PCI
+@@ -234,6 +235,7 @@ endif
+ 
+ config MEM_SHARING
+ 	bool "Xen memory sharing support" if EXPERT = "y"
++	default y
+ 	depends on HVM
+ 
+ endmenu
+diff --git a/xen/arch/x86/domain.c b/xen/arch/x86/domain.c
+index a4428190d5..bf12a86a59 100644
+--- a/xen/arch/x86/domain.c
++++ b/xen/arch/x86/domain.c
+@@ -2206,7 +2206,7 @@ int domain_relinquish_resources(struct domain *d)
+             d->arch.pirq_eoi_map = NULL;
+             d->arch.auto_unmask = 0;
+         }
+-
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+     PROGRESS(shared):
+ 
+diff --git a/xen/arch/x86/domctl.c b/xen/arch/x86/domctl.c
+index 8c55db2f69..adf3dc70b7 100644
+--- a/xen/arch/x86/domctl.c
++++ b/xen/arch/x86/domctl.c
+@@ -1172,7 +1172,7 @@ long arch_do_domctl(
+             copyback = true;
+         break;
+     }
+-
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+     case XEN_DOMCTL_mem_sharing_op:
+         ret = mem_sharing_domctl(d, &domctl->u.mem_sharing_op);
+diff --git a/xen/arch/x86/guest/xen/hypercall_page.S b/xen/arch/x86/guest/xen/hypercall_page.S
+index 6485e9150e..43b07843a1 100644
+--- a/xen/arch/x86/guest/xen/hypercall_page.S
++++ b/xen/arch/x86/guest/xen/hypercall_page.S
+@@ -60,6 +60,7 @@ DECLARE_HYPERCALL(domctl)
+ DECLARE_HYPERCALL(kexec_op)
+ DECLARE_HYPERCALL(argo_op)
+ DECLARE_HYPERCALL(xenpmu_op)
++DECLARE_HYPERCALL(trigger_ro_op)
+ 
+ DECLARE_HYPERCALL(arch_0)
+ DECLARE_HYPERCALL(arch_1)
+diff --git a/xen/arch/x86/hvm/hvm.c b/xen/arch/x86/hvm/hvm.c
+index 814b7020d8..982a0d929d 100644
+--- a/xen/arch/x86/hvm/hvm.c
++++ b/xen/arch/x86/hvm/hvm.c
+@@ -1926,6 +1926,7 @@ int hvm_hap_nested_page_fault(paddr_t gpa, unsigned long gla,
+     if ( p2m_is_paged(p2mt) || (p2mt == p2m_ram_paging_out) )
+         paged = 1;
+ 
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+     /* Mem sharing: if still shared on write access then its enomem */
+     if ( npfec.write_access && p2m_is_shared(p2mt) )
+diff --git a/xen/arch/x86/hvm/hypercall.c b/xen/arch/x86/hvm/hypercall.c
+index c41c2179c9..5d4408b1f4 100644
+--- a/xen/arch/x86/hvm/hypercall.c
++++ b/xen/arch/x86/hvm/hypercall.c
+@@ -150,7 +150,7 @@ static const hypercall_table_t hvm_hypercall_table[] = {
+ #endif
+     HYPERCALL(xenpmu_op),
+     COMPAT_CALL(dm_op),
+-    HYPERCALL(arch_1)
++    HYPERCALL(arch_1),
+ };
+ 
+ #undef do_arch_1
+diff --git a/xen/arch/x86/hypercall.c b/xen/arch/x86/hypercall.c
+index 7f299d45c6..306bb0d1df 100644
+--- a/xen/arch/x86/hypercall.c
++++ b/xen/arch/x86/hypercall.c
+@@ -73,6 +73,7 @@ const hypercall_args_t hypercall_args_table[NR_hypercalls] =
+     ARGS(hvm_op, 2),
+     ARGS(dm_op, 3),
+ #endif
++    ARGS(trigger_ro_op,1),
+     ARGS(mca, 1),
+     ARGS(arch_1, 1),
+ };
+diff --git a/xen/arch/x86/livepatch.c b/xen/arch/x86/livepatch.c
+index 901fad96bf..46b973ec7e 100644
+--- a/xen/arch/x86/livepatch.c
++++ b/xen/arch/x86/livepatch.c
+@@ -37,6 +37,7 @@ int arch_livepatch_safety_check(void)
+ 
+     for_each_domain ( d )
+     {
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+         if ( has_active_waitqueue(d->vm_event_share) )
+             goto fail;
+diff --git a/xen/arch/x86/mm.c b/xen/arch/x86/mm.c
+index 355c50ff91..761277ed5d 100644
+--- a/xen/arch/x86/mm.c
++++ b/xen/arch/x86/mm.c
+@@ -237,6 +237,8 @@ static void __init init_frametable_chunk(void *start, void *end)
+     memset(end, -1, s - e);
+ }
+ 
++
++
+ void __init init_frametable(void)
+ {
+     unsigned int sidx, eidx, nidx;
+diff --git a/xen/arch/x86/mm/mem_sharing.c b/xen/arch/x86/mm/mem_sharing.c
+index 7271e5c90b..6721943aea 100644
+--- a/xen/arch/x86/mm/mem_sharing.c
++++ b/xen/arch/x86/mm/mem_sharing.c
+@@ -737,8 +737,10 @@ static struct page_info *__grab_shared_page(mfn_t mfn)
+ {
+     struct page_info *pg = NULL;
+ 
+-    if ( !mfn_valid(mfn) )
++    if ( !mfn_valid(mfn) ) {
++	gdprintk(XENLOG_ERR, "rtshere1 invalid mfn=%lx\n", mfn_x(mfn));
+         return NULL;
++    }
+ 
+     pg = mfn_to_page(mfn);
+ 
+@@ -746,12 +748,15 @@ static struct page_info *__grab_shared_page(mfn_t mfn)
+      * If the page is not validated we can't lock it, and if it's
+      * not validated it's obviously not shared.
+      */
+-    if ( !mem_sharing_page_lock(pg) )
++    if ( !mem_sharing_page_lock(pg) ) {
++	gdprintk(XENLOG_ERR, "rtshere2 ");
+         return NULL;
++    }
+ 
+     if ( mem_sharing_lookup(mfn_x(mfn)) == NULL )
+     {
+         mem_sharing_page_unlock(pg);
++	gdprintk(XENLOG_ERR, "rtshere3 ");
+         return NULL;
+     }
+ 
+@@ -817,6 +822,247 @@ static int debug_gref(struct domain *d, grant_ref_t ref)
+     return debug_gfn(d, gfn);
+ }
+ 
++void nom_page(struct domain *d, gfn_t gfn, mfn_t mfn) {
++
++    
++    struct page_info *page = NULL; /* gcc... */
++    int ret=-1;
++    
++    page = mfn_to_page(mfn);
++    if(page && !(is_special_page(page))) {
++	ret = page_make_sharable(d, page, 0, false);
++	if( !mem_sharing_page_lock(page)) {
++		gdprintk(XENLOG_ERR, "nom_page mem_sharing_page_lock FAIL");
++	}
++
++	if ( !(page->sharing = xmalloc(struct page_sharing_info)) ) {
++                gdprintk(XENLOG_ERR, "nom_page xmalloc FAIL");
++        }
++	page->sharing->pg = page;
++	rmap_init(page);
++	page->sharing->handle=get_next_handle();
++
++	if ( !mem_sharing_gfn_alloc(page, d, gfn_x(gfn)) ) {
++		gdprintk(XENLOG_ERR, "nom_page memsharing_gfn_alloc FAIL");
++    	}
++
++        BUG_ON(p2m_change_type_one(d, gfn_x(gfn), p2m_ram_rw, p2m_ram_shared));
++
++	atomic_inc(&nr_shared_mfns);
++        /* Update m2p entry to SHARED_M2P_ENTRY */
++        set_gpfn_from_mfn(mfn_x(mfn), SHARED_M2P_ENTRY);
++	audit_add_list(page);
++	mem_sharing_page_unlock(page);
++
++	gdprintk(XENLOG_ERR, "nom_page reached end");
++    }
++
++
++
++}
++int nomin_page(struct domain *d, gfn_t gfn,
++                         unsigned int expected_refcnt, bool validate_only,
++                         shr_handle_t *phandle)
++{
++    struct p2m_domain *hp2m;
++    p2m_type_t p2mt;
++    p2m_access_t p2ma;
++    mfn_t mfn;
++    struct page_info *page = NULL; 
++    int ret;
++
++
++    hp2m = p2m_get_hostp2m(d);
++    mfn = get_gfn_type_access(hp2m, gfn_x(gfn), &p2mt, &p2ma, 0, NULL);
++	    gdprintk(XENLOG_ERR, "nom_page start");
++
++    page = mfn_to_page(mfn);
++    if ( page && !(is_special_page(page)) ) {
++
++
++
++
++	ret = page_make_sharable(d, page, 0, false);
++
++	    gdprintk(XENLOG_ERR, "nom_page c1");
++
++
++    if ( !mem_sharing_page_lock(page) ) {
++        gdprintk(XENLOG_ERR, "nom_page pagelock fail");
++    }
++	if( !(page->sharing = xmalloc(struct page_sharing_info)) ) {
++	    gdprintk(XENLOG_ERR, "nom_page err1");
++
++	   //print some error
++	}
++
++	    gdprintk(XENLOG_ERR, "nom_page c2");
++
++	page->sharing->pg = page;
++        rmap_init(page);
++	    gdprintk(XENLOG_ERR, "nom_page c3");
++
++	page->sharing->handle = get_next_handle();
++
++
++	  if ( !mem_sharing_gfn_alloc(page, d, gfn_x(gfn)) ) {
++		//print some error
++	    gdprintk(XENLOG_ERR, "nom_page err2");
++
++	  }
++	  BUG_ON(p2m_change_type_one(d, gfn_x(gfn), p2mt, p2m_ram_shared));
++
++
++	  atomic_inc(&nr_shared_mfns);
++          gdprintk(XENLOG_ERR, "nom_page c4");
++
++          /* Update m2p entry to SHARED_M2P_ENTRY */
++	  set_gpfn_from_mfn(mfn_x(mfn), SHARED_M2P_ENTRY);
++	  gdprintk(XENLOG_ERR, "nom_page c5");
++
++          audit_add_list(page);
++	  gdprintk(XENLOG_ERR, "nom_page c6");
++
++          mem_sharing_page_unlock(page);
++	  gdprintk(XENLOG_ERR, "nom_page c7");
++
++	  put_gfn(d, gfn_x(gfn));
++    }
++    gdprintk(XENLOG_ERR, "nom_page end");
++
++return 0;
++}
++
++
++
++
++/*
++int nomin_page(struct domain *d, gfn_t gfn,
++                         unsigned int expected_refcnt, bool validate_only,
++                         shr_handle_t *phandle)
++{
++    struct p2m_domain *hp2m = p2m_get_hostp2m(d);
++    p2m_type_t p2mt;
++    p2m_access_t p2ma;
++    mfn_t mfn;
++    struct page_info *page = NULL; 
++    int ret;
++
++    *phandle = 0UL;
++
++    mfn = get_gfn_type_access(hp2m, gfn_x(gfn), &p2mt, &p2ma, 0, NULL);
++
++    gdprintk(XENLOG_ERR, "nom_page reaches 1");
++
++    ret = -EINVAL;
++    if ( !mfn_valid(mfn) )
++        goto out;
++
++    if ( p2m_is_shared(p2mt) )
++    {
++        struct page_info *pg = __grab_shared_page(mfn);
++        if ( !pg )
++            BUG();
++
++        *phandle = pg->sharing->handle;
++        ret = 0;
++        mem_sharing_page_unlock(pg);
++        goto out;
++    }
++
++    gdprintk(XENLOG_ERR, "nom_page reaches 2");
++
++    if ( !p2m_is_sharable(p2mt) )
++        goto out;
++
++    page = mfn_to_page(mfn);
++    if ( !page || is_special_page(page) )
++        goto out;
++
++    gdprintk(XENLOG_ERR, "nom_page reaches 3");
++
++    if ( altp2m_active(d) )
++    {
++        unsigned int i;
++        struct p2m_domain *ap2m;
++        mfn_t amfn;
++        p2m_type_t ap2mt;
++        p2m_access_t ap2ma;
++
++        altp2m_list_lock(d);
++
++        for ( i = 0; i < MAX_ALTP2M; i++ )
++        {
++            ap2m = d->arch.altp2m_p2m[i];
++            if ( !ap2m )
++                continue;
++
++            amfn = __get_gfn_type_access(ap2m, gfn_x(gfn), &ap2mt, &ap2ma,
++                                         0, NULL, false);
++            if ( mfn_valid(amfn) && (!mfn_eq(amfn, mfn) || ap2ma != p2ma) )
++            {
++                altp2m_list_unlock(d);
++                goto out;
++            }
++        }
++
++        altp2m_list_unlock(d);
++    }
++
++    gdprintk(XENLOG_ERR, "nom_page reaches 4");
++
++    ret = page_make_sharable(d, page, expected_refcnt, validate_only);
++    if ( ret || validate_only )
++        goto out;
++
++    ret = -ENOENT;
++    if ( !mem_sharing_page_lock(page) )
++        goto out;
++
++    ret = -ENOMEM;
++    if ( !(page->sharing = xmalloc(struct page_sharing_info)) )
++    {
++        BUG_ON(page_make_private(d, page));
++        goto out;
++    }
++    page->sharing->pg = page;
++    rmap_init(page);
++
++    page->sharing->handle = get_next_handle();
++
++    gdprintk(XENLOG_ERR, "nom_page reaches 5");
++
++    if ( !mem_sharing_gfn_alloc(page, d, gfn_x(gfn)) )
++    {
++        xfree(page->sharing);
++        page->sharing = NULL;
++        BUG_ON(page_make_private(d, page));
++        goto out;
++    }
++
++    BUG_ON(p2m_change_type_one(d, gfn_x(gfn), p2mt, p2m_ram_shared));
++
++    gdprintk(XENLOG_ERR, "nom_page reaches 6");
++
++    atomic_inc(&nr_shared_mfns);
++
++    set_gpfn_from_mfn(mfn_x(mfn), SHARED_M2P_ENTRY);
++
++    gdprintk(XENLOG_ERR, "nom_page reaches 7");
++
++    *phandle = page->sharing->handle;
++    audit_add_list(page);
++    mem_sharing_page_unlock(page);
++    ret = 0;
++
++out:
++    put_gfn(d, gfn_x(gfn));
++    return ret;
++}
++*/
++
++
++
+ static int nominate_page(struct domain *d, gfn_t gfn,
+                          unsigned int expected_refcnt, bool validate_only,
+                          shr_handle_t *phandle)
+diff --git a/xen/arch/x86/mm/p2m-ept.c b/xen/arch/x86/mm/p2m-ept.c
+index 293f3e9419..1446d1d120 100644
+--- a/xen/arch/x86/mm/p2m-ept.c
++++ b/xen/arch/x86/mm/p2m-ept.c
+@@ -31,7 +31,8 @@
+ #include <asm/hvm/cacheattr.h>
+ #include <xen/keyhandler.h>
+ #include <xen/softirq.h>
+-
++//#include <xen/hypercall.h>
++//#include <asm/hypercall.h>
+ #include "mm-locks.h"
+ 
+ #define atomic_read_ept_entry(__pepte)                              \
+@@ -353,6 +354,293 @@ static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
+  * present entries in the given page table, optionally marking the entries
+  * also for their subtrees needing P2M type re-calculation.
+  */
++
++unsigned long trigger_ro_ops( struct domain *d ) {
++      struct ept_data *ept;
++      struct p2m_domain *p2m;
++      int order;
++      int i;
++      int rtt=0;
++      //extra code
++      //int rcc;
++      int ret;
++      unsigned long gfn, gfn_remainder;
++      ept_entry_t *table;
++      ept_entry_t *ept_entry;
++//      ept_entry_t e;
++//extra code
++//	struct page_info *page;
++//	int expected_refcnt;
++//	int rt;
++//
++        p2m = p2m_get_hostp2m(d);
++        ept = &p2m->ept;
++        order = (ept->wl) * EPT_TABLE_ORDER;
++
++        printk("\ndomain%d EPT p2m table:\n", d->domain_id);
++	printk("\norder%d", order);
++	
++        for ( gfn = 0; gfn <= p2m->max_mapped_pfn; gfn += 1UL << order )
++        {
++            
++            ret = GUEST_TABLE_MAP_FAILED;
++
++            gfn_remainder = gfn;
++            table = map_domain_page(pagetable_get_mfn(p2m_get_pagetable(p2m)));
++
++            for ( i = ept->wl; i > 0; i-- )
++            {
++                ept_entry = table + (gfn_remainder >> (i * EPT_TABLE_ORDER));
++                ret = ept_next_level(p2m, 1, &table, &gfn_remainder, i);
++                if ( ret != GUEST_TABLE_NORMAL_PAGE )
++                    break;
++            }
++
++            order = i * EPT_TABLE_ORDER;
++            ept_entry = table + (gfn_remainder >> order);
++            if ( ret != GUEST_TABLE_MAP_FAILED && is_epte_valid(ept_entry) )
++            {
++                if ( ept_entry->sa_p2mt == p2m_populate_on_demand )
++                    printk("gfn: %13lx order: %2d PoD sap2mt=%d\n", gfn, order,(ept_entry->sa_p2mt));
++                else
++                    printk("gfn: %13lx order: %2d mfn: %13lx %c%c%c sap2mt=%d\n",
++                           gfn, order, ept_entry->mfn + 0UL,
++                           ept_entry->r ? 'r' : ' ',
++                           ept_entry->w ? 'w' : ' ',
++                           ept_entry->x ? 'x' : ' ',
++			   (ept_entry->sa_p2mt));
++
++//extra code
++
++//		page=NULL;
++//		page=mfn_to_page(mfn);
++//		expected_refcnt=0;
++//		if(page && !(is_xen_heap_page(page))) {
++//			rt=page_make_sharable(d, page, expected_refcnt);	
++//
++
++//
++
++
++		if(ept_entry->sa_p2mt == p2m_ram_rw) {
++		/*
++		e = atomic_read_ept_entry(ept_entry);
++
++		e.sa_p2mt = p2m_ram_shared;
++		ept_p2m_type_to_flags(p2m, &e);
++		
++		//maybe e.recalc=0;
++		rcc = atomic_write_ept_entry(p2m,ept_entry,e,i);	
++		
++		//extra code
++		//set_gpfn_from_mfn(mfn_x(ept_entry->mfn),SHARED_M2P_ENTRY);
++		//
++		*/
++
++		rtt=nomin_page(d,_gfn(gfn),0,false, NULL);
++		//nom_page(d, _gfn(gfn), _mfn(ept_entry->mfn));
++		printk("modgfn: %13lx order: %2d mfn: %13lx %c%c%c sap2mt=%d\n",
++                           gfn, order, ept_entry->mfn + 0UL,
++                           ept_entry->r ? 'r' : ' ',
++                           ept_entry->w ? 'w' : ' ',
++                           ept_entry->x ? 'x' : ' ',
++                           (ept_entry->sa_p2mt));
++
++		}
++//	} //emd of xen_heap_page
++
++            }
++	     
++
++       	
++            unmap_domain_page(table);
++        }
++	printk("\nTop_order%d", (ept->wl)*EPT_TABLE_ORDER);
++		printk("\nwl%d", (ept->wl));
++
++return 0;	
++}
++
++
++
++
++
++/*
++unsigned long trigger_ro_ops( struct domain *d ) {
++      struct ept_data *ept;
++      struct p2m_domain *p2m;
++      int order;
++      int i;
++      int rcc;
++      int ret;
++      unsigned long gfn, gfn_remainder;
++      ept_entry_t *table;
++      ept_entry_t *ept_entry;
++      ept_entry_t e;
++//extra code
++//	struct page_info *page;
++//	int expected_refcnt;
++//	int rt;
++//
++        p2m = p2m_get_hostp2m(d);
++        ept = &p2m->ept;
++        order = (ept->wl) * EPT_TABLE_ORDER;
++
++        printk("\ndomain%d EPT p2m table:\n", d->domain_id);
++	printk("\norder%d", order);
++	
++        for ( gfn = 0; gfn <= p2m->max_mapped_pfn; gfn += 1UL << order )
++        {
++            
++            ret = GUEST_TABLE_MAP_FAILED;
++
++            gfn_remainder = gfn;
++            table = map_domain_page(pagetable_get_mfn(p2m_get_pagetable(p2m)));
++
++            for ( i = ept->wl; i > 0; i-- )
++            {
++                ept_entry = table + (gfn_remainder >> (i * EPT_TABLE_ORDER));
++                ret = ept_next_level(p2m, 1, &table, &gfn_remainder, i);
++                if ( ret != GUEST_TABLE_NORMAL_PAGE )
++                    break;
++            }
++
++            order = i * EPT_TABLE_ORDER;
++            ept_entry = table + (gfn_remainder >> order);
++            if ( ret != GUEST_TABLE_MAP_FAILED && is_epte_valid(ept_entry) )
++            {
++                if ( ept_entry->sa_p2mt == p2m_populate_on_demand )
++                    printk("gfn: %13lx order: %2d PoD sap2mt=%d\n", gfn, order,(ept_entry->sa_p2mt));
++                else
++                    printk("gfn: %13lx order: %2d mfn: %13lx %c%c%c sap2mt=%d\n",
++                           gfn, order, ept_entry->mfn + 0UL,
++                           ept_entry->r ? 'r' : ' ',
++                           ept_entry->w ? 'w' : ' ',
++                           ept_entry->x ? 'x' : ' ',
++			   (ept_entry->sa_p2mt));
++
++//extra code
++
++//		page=NULL;
++//		page=mfn_to_page(mfn);
++//		expected_refcnt=0;
++//		if(page && !(is_xen_heap_page(page))) {
++//			rt=page_make_sharable(d, page, expected_refcnt);	
++//
++
++//
++
++
++		if(ept_entry->sa_p2mt == p2m_ram_rw) {
++		
++		e = atomic_read_ept_entry(ept_entry);
++
++		e.sa_p2mt = p2m_ram_shared;
++		ept_p2m_type_to_flags(p2m, &e);
++		
++		//maybe e.recalc=0;
++		rcc = atomic_write_ept_entry(p2m,ept_entry,e,i);	
++		
++		//extra code
++		//set_gpfn_from_mfn(mfn_x(ept_entry->mfn),SHARED_M2P_ENTRY);
++		//
++		printk("modgfn: %13lx order: %2d mfn: %13lx %c%c%c sap2mt=%d\n",
++                           gfn, order, ept_entry->mfn + 0UL,
++                           ept_entry->r ? 'r' : ' ',
++                           ept_entry->w ? 'w' : ' ',
++                           ept_entry->x ? 'x' : ' ',
++                           (ept_entry->sa_p2mt));
++		}
++//	} //emd of xen_heap_page
++
++            }
++	     
++
++       	
++            unmap_domain_page(table);
++        }
++	printk("\nTop_order%d", (ept->wl)*EPT_TABLE_ORDER);
++		printk("\nwl%d", (ept->wl));
++
++return 0;	
++}
++
++*/
++/*
++unsigned long trigger_ro_ops( struct domain *d ) {
++
++   struct p2m_domain *p2m;
++   struct ept_data *ept;
++   ept_entry_t *table;
++   ept_entry_t *ept_entry;
++   mfn_t mfn;
++   int i;
++
++   printk("triggerroopslevel2");
++  
++   if( d ) {
++      printk("domId present");
++
++      p2m = p2m_get_hostp2m(d);
++      ept = &p2m->ept;
++      table = map_domain_page(pagetable_get_mfn(p2m_get_pagetable(p2m)));
++      //or ept_entry_t *table = map_domain_page(_mfn(ept->mfn));
++      
++      //ept_entry = table;
++      ept_entry = map_domain_page(pagetable_get_mfn(p2m_get_pagetable(p2m)));
++      mfn = pagetable_get_mfn(p2m_get_pagetable(p2m));
++      
++      //or mfn_t mfn = ept->mfn;
++
++      
++      for(i = ept->wl; i>=0; i--) {
++         ept_mark_level_ro(p2m, mfn, i);
++         mfn = _mfn(ept_entry->mfn);
++    //   unmap_domain_page(ept_entry); //try placing this after next line
++         ept_entry = map_domain_page(mfn);
++      }
++      
++      unmap_domain_page(table);
++      return 0;
++   }
++   
++   return 1;
++
++}
++
++void ept_mark_level_ro(struct p2m_domain *p2m, mfn_t mfn, unsigned int level) {
++//    int rc;
++    printk("\nlevel= %u",level);
++    ept_entry_t *epte = map_domain_page(mfn);
++    unsigned int i;
++  //  bool changed = false;
++
++    if ( !level )
++    {
++//        ASSERT_UNREACHABLE();
++  //      return false;
++    }
++
++    for ( i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )
++    {
++        ept_entry_t e = atomic_read_ept_entry(&epte[i]);
++	printk("\n entry value is ");
++        if ( !is_epte_valid(&e) || !is_epte_present(&e) || is_epte_superpage(&e))
++            continue;
++
++
++//	e.sa_p2mt = p2m_ram_shared;
++//	ept_p2m_type_to_flags(p2m,&e);
++//      rc = atomic_write_ept_entry(p2m, &epte[i], e, level - 1);
++//        ASSERT(rc == 0);
++//        changed = true;
++    }
++
++    unmap_domain_page(epte);
++
++//    return changed;
++}
++*/
+ static bool ept_invalidate_emt_subtree(struct p2m_domain *p2m, mfn_t mfn,
+                                        bool recalc, unsigned int level)
+ {
+diff --git a/xen/arch/x86/mm/p2m.c b/xen/arch/x86/mm/p2m.c
+index 4c1507d3a4..1c2be783ab 100644
+--- a/xen/arch/x86/mm/p2m.c
++++ b/xen/arch/x86/mm/p2m.c
+@@ -50,6 +50,24 @@ boolean_param("hap_2mb", opt_hap_2mb);
+ 
+ DEFINE_PERCPU_RWLOCK_GLOBAL(p2m_percpu_rwlock);
+ 
++unsigned long do_trigger_ro_op( unsigned long domainId ) {
++         unsigned long ret=1;
++	 unsigned short domId;
++	 struct domain *d;
++
++         printk("Invoketriggerroop");
++	 domId  = (unsigned short)domainId;
++         d = get_domain_by_id( domId );
++	 if ( d ) {
++	    printk(" domain existing " );
++	    if ( hap_enabled(d) && cpu_has_vmx ) {
++               ret=trigger_ro_ops(d);
++	    }
++	 }
++         return ret;
++}
++
++
+ static void p2m_nestedp2m_init(struct p2m_domain *p2m)
+ {
+ #ifdef CONFIG_HVM
+@@ -97,10 +115,12 @@ static int p2m_initialise(struct domain *d, struct p2m_domain *p2m)
+     p2m_pod_init(p2m);
+     p2m_nestedp2m_init(p2m);
+ 
+-    if ( hap_enabled(d) && cpu_has_vmx )
++    if ( hap_enabled(d) && cpu_has_vmx ) {
+         ret = ept_p2m_init(p2m);
+-    else
++    }
++    else {
+         p2m_pt_init(p2m);
++    }
+ 
+     spin_lock_init(&p2m->ioreq.lock);
+ 
+diff --git a/xen/arch/x86/pv/hypercall.c b/xen/arch/x86/pv/hypercall.c
+index b0d1d0ed77..a5b8e29620 100644
+--- a/xen/arch/x86/pv/hypercall.c
++++ b/xen/arch/x86/pv/hypercall.c
+@@ -86,6 +86,7 @@ const hypercall_table_t pv_hypercall_table[] = {
+     COMPAT_CALL(dm_op),
+ #endif
+     HYPERCALL(mca),
++    HYPERCALL(trigger_ro_op),
+     HYPERCALL(arch_1),
+ };
+ 
+diff --git a/xen/arch/x86/traps.c b/xen/arch/x86/traps.c
+index 73c6218660..22c23844d5 100644
+--- a/xen/arch/x86/traps.c
++++ b/xen/arch/x86/traps.c
+@@ -81,13 +81,14 @@
+ #include <xsm/xsm.h>
+ #include <asm/pv/traps.h>
+ #include <asm/pv/mm.h>
+-
+ /*
+  * opt_nmi: one of 'ignore', 'dom0', or 'fatal'.
+  *  fatal:  Xen prints diagnostic message and then hangs.
+  *  dom0:   The NMI is virtualised to DOM0.
+  *  ignore: The NMI error is cleared and ignored.
+  */
++//extern bool ept_mark_level_ro(struct p2m_domain *p2m, mfn_t mfn, unsigned int level);
++
+ #ifdef NDEBUG
+ static char __read_mostly opt_nmi[10] = "dom0";
+ #else
+@@ -799,6 +800,53 @@ static void do_trap(struct cpu_user_regs *regs)
+           trapnr, trapstr(trapnr), regs->error_code);
+ }
+ 
++/*
++   unsigned long do_trigger_ro_op( unsigned long domainId ) {
++   struct domain *d;
++   unsigned short domId;
++   struct p2m_domain *p2m;
++   struct ept_data *ept;
++   ept_entry_t *table;
++   ept_entry_t *ept_entry;
++   mfn_t mfn;
++   int i;
++
++   printk("Invoketriggerroop");
++   
++   domId  = (unsigned short)domainId;
++   d = get_domain_by_id( domId );
++   if( d ) {
++      printk("domId present");
++
++      p2m = p2m_get_hostp2m(d);
++      ept = &p2m->ept;
++      table = map_domain_page(pagetable_get_mfn(p2m_get_pagetable(p2m)));
++      //or ept_entry_t *table = map_domain_page(_mfn(ept->mfn));
++      ept_entry = table;
++      mfn = pagetable_get_mfn(p2m_get_pagetable(p2m));
++      //or mfn_t mfn = ept->mfn;
++
++      for(i = ept->wl; i>=0; i--) {
++         ept_mark_level_ro(p2m, mfn, i);
++         mfn = _mfn(ept_entry->mfn);
++         unmap_domain_page(ept_entry);
++         ept_entry = map_domain_page(mfn);
++      }
++      unmap_domain_page(table);
++      return 0;
++   }
++   return 1;
++}
++
++
++unsigned long do_trigger_ro_op( unsigned long domainId ) {
++         unsigned long ret=1;
++         printk("Invoketriggerroop");
++         ret=trigger_ro_op_1(domainId);
++         return ret;
++         return 1;
++}
++*/
+ int guest_rdmsr_xen(const struct vcpu *v, uint32_t idx, uint64_t *val)
+ {
+     const struct domain *d = v->domain;
+diff --git a/xen/arch/x86/x86_64/mm.c b/xen/arch/x86/x86_64/mm.c
+index 102079a801..94d0366b32 100644
+--- a/xen/arch/x86/x86_64/mm.c
++++ b/xen/arch/x86/x86_64/mm.c
+@@ -44,6 +44,7 @@ unsigned int __read_mostly m2p_compat_vstart = __HYPERVISOR_COMPAT_VIRT_START;
+ 
+ l2_pgentry_t *compat_idle_pg_table_l2;
+ 
++
+ void *do_page_walk(struct vcpu *v, unsigned long addr)
+ {
+     unsigned long mfn = pagetable_get_pfn(v->arch.guest_table);
+diff --git a/xen/common/Kconfig b/xen/common/Kconfig
+index a6914fcae9..f90f762766 100644
+--- a/xen/common/Kconfig
++++ b/xen/common/Kconfig
+@@ -48,6 +48,9 @@ config MEM_ACCESS
+ config HAS_MEM_PAGING
+ 	bool
+ 
++config HAS_MEM_SHARING
++	bool
++
+ config HAS_PDX
+ 	bool
+ 
+diff --git a/xen/include/asm-x86/hvm/domain.h b/xen/include/asm-x86/hvm/domain.h
+index 95fe18cddc..ba0d69d455 100644
+--- a/xen/include/asm-x86/hvm/domain.h
++++ b/xen/include/asm-x86/hvm/domain.h
+@@ -63,7 +63,7 @@ struct hvm_ioreq_server {
+     bool                   enabled;
+     uint8_t                bufioreq_handling;
+ };
+-
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+ struct mem_sharing_domain
+ {
+@@ -200,6 +200,7 @@ struct hvm_domain {
+         struct svm_domain svm;
+     };
+ 
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+     struct mem_sharing_domain mem_sharing;
+ #endif
+diff --git a/xen/include/asm-x86/hvm/vmx/vmx.h b/xen/include/asm-x86/hvm/vmx/vmx.h
+index 111ccd7e61..03e2b9f085 100644
+--- a/xen/include/asm-x86/hvm/vmx/vmx.h
++++ b/xen/include/asm-x86/hvm/vmx/vmx.h
+@@ -600,6 +600,9 @@ void ept_p2m_uninit(struct p2m_domain *p2m);
+ 
+ void ept_walk_table(struct domain *d, unsigned long gfn);
+ bool_t ept_handle_misconfig(uint64_t gpa);
++void ept_mark_level_ro(struct p2m_domain *p2m, mfn_t mfn, unsigned int level);
++unsigned long trigger_ro_ops( struct domain *d );
++
+ void setup_ept_dump(void);
+ void p2m_init_altp2m_ept(struct domain *d, unsigned int i);
+ /* Locate an alternate p2m by its EPTP */
+diff --git a/xen/include/asm-x86/hypercall.h b/xen/include/asm-x86/hypercall.h
+index 1cd8046464..c5c4f414ef 100644
+--- a/xen/include/asm-x86/hypercall.h
++++ b/xen/include/asm-x86/hypercall.h
+@@ -135,6 +135,8 @@ do_set_segment_base(
+     unsigned int which,
+     unsigned long base);
+ 
++extern unsigned long do_trigger_ro_op(unsigned long domId);
++
+ #ifdef CONFIG_COMPAT
+ 
+ #include <compat/arch-x86/xen.h>
+diff --git a/xen/include/asm-x86/mem_sharing.h b/xen/include/asm-x86/mem_sharing.h
+index cf7a12f4d2..90a13e4475 100644
+--- a/xen/include/asm-x86/mem_sharing.h
++++ b/xen/include/asm-x86/mem_sharing.h
+@@ -64,6 +64,14 @@ struct page_sharing_info
+ unsigned int mem_sharing_get_nr_saved_mfns(void);
+ unsigned int mem_sharing_get_nr_shared_mfns(void);
+ 
++
++//extra code
++void nom_page(struct domain *d, gfn_t gfn, mfn_t mfn);
++
++int nomin_page(struct domain *d, gfn_t gfn,
++                         unsigned int expected_refcnt, bool validate_only,
++                         shr_handle_t *phandle);
++
+ /* Only fails with -ENOMEM. Enforce it with a BUG_ON wrapper. */
+ int __mem_sharing_unshare_page(struct domain *d,
+                                unsigned long gfn,
+diff --git a/xen/include/asm-x86/mm.h b/xen/include/asm-x86/mm.h
+index 3d3f9d49ac..e36dd7a46f 100644
+--- a/xen/include/asm-x86/mm.h
++++ b/xen/include/asm-x86/mm.h
+@@ -8,7 +8,6 @@
+ #include <asm/io.h>
+ #include <asm/uaccess.h>
+ #include <asm/x86_emulate.h>
+-
+ /*
+  * Per-page-frame information.
+  *
+@@ -130,7 +129,7 @@ struct page_info
+         /* For non-pinnable single-page shadows, a higher entry that points
+          * at us. */
+         paddr_t up;
+-
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+         /* For shared/sharable pages, we use a doubly-linked list
+          * of all the {pfn,domain} pairs that map this page. We also include
+@@ -582,6 +581,7 @@ void update_cr3(struct vcpu *v);
+ int vcpu_destroy_pagetables(struct vcpu *);
+ void *do_page_walk(struct vcpu *v, unsigned long addr);
+ 
++
+ /* Allocator functions for Xen pagetables. */
+ void *alloc_xen_pagetable(void);
+ void free_xen_pagetable(void *v);
+diff --git a/xen/include/asm-x86/p2m.h b/xen/include/asm-x86/p2m.h
+index ace3573ae8..53ab627bf3 100644
+--- a/xen/include/asm-x86/p2m.h
++++ b/xen/include/asm-x86/p2m.h
+@@ -32,6 +32,7 @@
+ #include <asm/page.h>    /* for pagetable_t */
+ 
+ extern bool_t opt_hap_1gb, opt_hap_2mb;
++//bool ept_mark_level_ro(struct p2m_domain *p2m, mfn_t mfn, unsigned int level);
+ 
+ /*
+  * The upper levels of the p2m pagetable always contain full rights; all 
+diff --git a/xen/include/public/xen.h b/xen/include/public/xen.h
+index 75b1619d0d..5949279256 100644
+--- a/xen/include/public/xen.h
++++ b/xen/include/public/xen.h
+@@ -130,6 +130,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
+ #define __HYPERVISOR_argo_op              39
+ #define __HYPERVISOR_xenpmu_op            40
+ #define __HYPERVISOR_dm_op                41
++#define __HYPERVISOR_trigger_ro_op        42
+ 
+ /* Architecture-specific hypercall definitions. */
+ #define __HYPERVISOR_arch_0               48
+diff --git a/xen/include/xen/mm.h b/xen/include/xen/mm.h
+index 9b62087be1..c7e10fe8ff 100644
+--- a/xen/include/xen/mm.h
++++ b/xen/include/xen/mm.h
+@@ -275,6 +275,7 @@ struct npfec {
+ 
+ /* Private domain structs for DOMID_XEN, DOMID_IO, etc. */
+ extern struct domain *dom_xen, *dom_io;
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+ extern struct domain *dom_cow;
+ #else
+diff --git a/xen/include/xen/sched.h b/xen/include/xen/sched.h
+index 6101761d25..645af330ef 100644
+--- a/xen/include/xen/sched.h
++++ b/xen/include/xen/sched.h
+@@ -479,10 +479,11 @@ struct domain
+     /* Various vm_events */
+ 
+     /* Memory sharing support */
+-#ifdef CONFIG_MEM_SHARING
++    //extra code
++    #ifdef CONFIG_MEM_SHARING
+     struct vm_event_domain *vm_event_share;
+     struct domain *parent; /* VM fork parent */
+-#endif
++    #endif
+     /* Memory paging support */
+ #ifdef CONFIG_HAS_MEM_PAGING
+     struct vm_event_domain *vm_event_paging;
+diff --git a/xen/include/xsm/dummy.h b/xen/include/xsm/dummy.h
+index 295dd67c48..329a41dfa7 100644
+--- a/xen/include/xsm/dummy.h
++++ b/xen/include/xsm/dummy.h
+@@ -597,7 +597,7 @@ static XSM_INLINE int xsm_mem_paging(XSM_DEFAULT_ARG struct domain *d)
+     return xsm_default_action(action, current->domain, d);
+ }
+ #endif
+-
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+ static XSM_INLINE int xsm_mem_sharing(XSM_DEFAULT_ARG struct domain *d)
+ {
+diff --git a/xen/include/xsm/xsm.h b/xen/include/xsm/xsm.h
+index e22d6160b5..6ee566553f 100644
+--- a/xen/include/xsm/xsm.h
++++ b/xen/include/xsm/xsm.h
+@@ -149,7 +149,7 @@ struct xsm_operations {
+ #ifdef CONFIG_HAS_MEM_PAGING
+     int (*mem_paging) (struct domain *d);
+ #endif
+-
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+     int (*mem_sharing) (struct domain *d);
+ #endif
+@@ -596,7 +596,7 @@ static inline int xsm_mem_paging (xsm_default_t def, struct domain *d)
+     return xsm_ops->mem_paging(d);
+ }
+ #endif
+-
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+ static inline int xsm_mem_sharing (xsm_default_t def, struct domain *d)
+ {
+diff --git a/xen/xsm/dummy.c b/xen/xsm/dummy.c
+index 5705e52791..9841341c5b 100644
+--- a/xen/xsm/dummy.c
++++ b/xen/xsm/dummy.c
+@@ -127,7 +127,7 @@ void __init xsm_fixup_ops (struct xsm_operations *ops)
+ #ifdef CONFIG_HAS_MEM_PAGING
+     set_to_dummy_if_null(ops, mem_paging);
+ #endif
+-
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+     set_to_dummy_if_null(ops, mem_sharing);
+ #endif
+diff --git a/xen/xsm/flask/hooks.c b/xen/xsm/flask/hooks.c
+index 4649e6fd95..e636512064 100644
+--- a/xen/xsm/flask/hooks.c
++++ b/xen/xsm/flask/hooks.c
+@@ -1259,7 +1259,7 @@ static int flask_mem_paging(struct domain *d)
+     return current_has_perm(d, SECCLASS_DOMAIN2, DOMAIN2__MEM_PAGING);
+ }
+ #endif
+-
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+ static int flask_mem_sharing(struct domain *d)
+ {
+@@ -1831,6 +1831,7 @@ static struct xsm_operations flask_ops = {
+     .mem_paging = flask_mem_paging,
+ #endif
+ 
++//extra code
+ #ifdef CONFIG_MEM_SHARING
+     .mem_sharing = flask_mem_sharing,
+ #endif

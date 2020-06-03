@@ -1926,6 +1926,7 @@ int hvm_hap_nested_page_fault(paddr_t gpa, unsigned long gla,
     if ( p2m_is_paged(p2mt) || (p2mt == p2m_ram_paging_out) )
         paged = 1;
 
+//extra code
 #ifdef CONFIG_MEM_SHARING
     /* Mem sharing: if still shared on write access then its enomem */
     if ( npfec.write_access && p2m_is_shared(p2mt) )

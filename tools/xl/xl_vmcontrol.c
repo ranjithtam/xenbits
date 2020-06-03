@@ -916,10 +916,12 @@ start:
         libxl_defbool_set(&params.userspace_colo_proxy,
                           dom_info->userspace_colo_proxy);
 
+	d_config.c_info.name="hello";
         ret = libxl_domain_create_restore(ctx, &d_config,
                                           &domid, restore_fd,
                                           send_back_fd, &params,
                                           0, autoconnect_console_how);
+
 
         libxl_domain_restore_params_dispose(&params);
 

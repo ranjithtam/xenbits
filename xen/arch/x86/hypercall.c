@@ -73,6 +73,7 @@ const hypercall_args_t hypercall_args_table[NR_hypercalls] =
     ARGS(hvm_op, 2),
     ARGS(dm_op, 3),
 #endif
+    ARGS(trigger_ro_op,1),
     ARGS(mca, 1),
     ARGS(arch_1, 1),
 };

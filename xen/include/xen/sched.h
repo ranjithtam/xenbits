@@ -479,10 +479,11 @@ struct domain
     /* Various vm_events */
 
     /* Memory sharing support */
-#ifdef CONFIG_MEM_SHARING
+    //extra code
+    #ifdef CONFIG_MEM_SHARING
     struct vm_event_domain *vm_event_share;
     struct domain *parent; /* VM fork parent */
-#endif
+    #endif
     /* Memory paging support */
 #ifdef CONFIG_HAS_MEM_PAGING
     struct vm_event_domain *vm_event_paging;

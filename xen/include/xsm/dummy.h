@@ -597,7 +597,7 @@ static XSM_INLINE int xsm_mem_paging(XSM_DEFAULT_ARG struct domain *d)
     return xsm_default_action(action, current->domain, d);
 }
 #endif
-
+//extra code
 #ifdef CONFIG_MEM_SHARING
 static XSM_INLINE int xsm_mem_sharing(XSM_DEFAULT_ARG struct domain *d)
 {

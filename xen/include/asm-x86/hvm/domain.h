@@ -63,7 +63,7 @@ struct hvm_ioreq_server {
     bool                   enabled;
     uint8_t                bufioreq_handling;
 };
-
+//extra code
 #ifdef CONFIG_MEM_SHARING
 struct mem_sharing_domain
 {
@@ -200,6 +200,7 @@ struct hvm_domain {
         struct svm_domain svm;
     };
 
+//extra code
 #ifdef CONFIG_MEM_SHARING
     struct mem_sharing_domain mem_sharing;
 #endif

@@ -44,6 +44,7 @@ unsigned int __read_mostly m2p_compat_vstart = __HYPERVISOR_COMPAT_VIRT_START;
 
 l2_pgentry_t *compat_idle_pg_table_l2;
 
+
 void *do_page_walk(struct vcpu *v, unsigned long addr)
 {
     unsigned long mfn = pagetable_get_pfn(v->arch.guest_table);
